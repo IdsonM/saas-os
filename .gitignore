@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.streamlit/
+sistema_os.db
+.venv/
+venv/
+.env
