@@ -1,8 +1,14 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Define o caminho do banco de dados SQLite local
-SQLALCHEMY_DATABASE_URL = "sqlite:///../sistema_os.db"
+# 🟢 Define um caminho absoluto seguro independente de onde o sistema esteja rodando
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Garante que o banco seja criado na pasta raiz do projeto na nuvem (uma pasta acima do backend)
+DB_PATH = os.path.join(BASE_DIR, "..", "sistema_os.db")
+
+# Cria a URL com o caminho absoluto correto
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.abspath(DB_PATH)}"
 
 # Cria o motor do banco de dados
 engine = create_engine(
