@@ -1,10 +1,17 @@
-fastapi
-uvicorn
-sqlalchemy
-bcrypt
-python-dotenv
+streamlit
 requests
-pydantic
+pandas
+plotly
+reportlab
+urllib3
+
+#fastapi
+#uvicorn
+#sqlalchemy
+#bcrypt
+#python-dotenv
+#requests
+#pydantic
 
 #fastapi==0.110.0
 #uvicorn[standard]==0.29.0

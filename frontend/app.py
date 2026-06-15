@@ -6,12 +6,15 @@ import plotly.express as px
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from datetime import datetime
-import os
+import urllib3
 
-# ✅ API correta e segura apontando para o Render
+# ✅ REMOVE WARNING SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ✅ API
 API_URL = "https://saas-os-api.onrender.com"
 
-# ✅ Configuração de página do Streamlit
+# ✅ CONFIG
 st.set_page_config(
     page_title="Sistema de OS PRO",
     layout="wide",
@@ -20,10 +23,14 @@ st.set_page_config(
 
 st.info(f"API conectada: {API_URL}")
 
-# --- SISTEMA DE PERSISTÊNCIA COMPATÍVEL COM F5 ---
+# -----------------------------------------
+# 🔐 LOGIN
+# -----------------------------------------
 def verificar_login_definitivo():
+
     if "autenticado" not in st.session_state:
         st.session_state["autenticado"] = False
+
     if "usuario_nome" not in st.session_state:
         st.session_state["usuario_nome"] = ""
 
@@ -31,63 +38,85 @@ def verificar_login_definitivo():
         return True
 
     params = st.query_params
-    if "token_user" in params and not st.session_state["autenticado"]:
+
+    if "token_user" in params:
         st.session_state["autenticado"] = True
         st.session_state["usuario_nome"] = params["token_user"]
         return True
 
-    st.markdown("<h2 style='text-align: center;'>🔐 Acesso Restrito</h2>", unsafe_allow_html=True)
-    col_esquerda, col_centro, col_direita = st.columns([3.5, 3.0, 3.5])
-    
-    with col_centro:
-        with st.form("formulario_login"):
-            usuario = st.text_input("Usuário:")
-            senha = st.text_input("Senha:", type="password")
-            botao_entrar = st.form_submit_button("Entrar no Sistema", use_container_width=True)
-            
-            if botao_entrar:
-                with st.spinner("Conectando ao servidor na nuvem..."):
+    st.markdown("<h2 style='text-align:center;'>🔐 Acesso Restrito</h2>", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([3, 2, 3])
+
+    with col2:
+        with st.form("form_login"):
+
+            usuario = st.text_input("Usuário")
+            senha = st.text_input("Senha", type="password")
+
+            entrar = st.form_submit_button("Entrar", use_container_width=True)
+
+            if entrar:
+
+                if not usuario or not senha:
+                    st.warning("Preencha usuário e senha")
+                    return False
+
+                with st.spinner("Conectando com API..."):
+
                     try:
-                        payload = {"username": usuario, "password": senha}
-                        # Envia com a barra final idêntica ao backend FastAPI
-                        res = requests.post(f"{API_URL}/login/", json=payload, timeout=60)
-                        
-                        if res.status_code == 200:
+                        response = requests.post(
+                            f"{API_URL}/login/",
+                            json={"username": usuario, "password": senha},
+                            timeout=60,
+                            verify=False  # 🔥 CORREÇÃO SSL
+                        )
+
+                        # ✅ DEBUG
+                        st.write("Status HTTP:", response.status_code)
+                        st.write("Resposta:", response.text)
+
+                        if response.status_code == 200:
                             st.session_state["autenticado"] = True
                             st.session_state["usuario_nome"] = usuario
                             st.query_params["token_user"] = usuario
-                            st.success("Acesso liberado!")
+
+                            st.success("Login realizado ✅")
                             st.rerun()
+
                         else:
-                            st.error("Usuário ou senha incorretos.")
-                    except requests.exceptions.RequestException:
-                        st.error("Não foi possível conectar ao Backend para autenticar.")
+                            st.error("Usuário ou senha inválidos")
+
+                    except Exception as e:
+                        import traceback
+
+                        st.error("Erro ao conectar com backend")
+                        st.text(f"Tipo: {type(e).__name__}")
+                        st.text(f"Detalhes: {str(e)}")
+                        st.text(traceback.format_exc())
+
     return False
 
+
+# BLOQUEIO
 if not verificar_login_definitivo():
     st.stop()
 
-# --- BARRA LATERAL ---
+# -----------------------------------------
+# SIDEBAR
+# -----------------------------------------
 with st.sidebar:
-    st.markdown(f"### 👤 Usuário: **{st.session_state['usuario_nome']}**")
-    st.markdown("---")
-    if st.button("🚪 Sair do Sistema", use_container_width=True, type="primary"):
+    st.markdown(f"### 👤 {st.session_state['usuario_nome']}")
+
+    if st.button("🚪 Sair", use_container_width=True):
         st.session_state["autenticado"] = False
         st.session_state["usuario_nome"] = ""
         st.query_params.clear()
         st.rerun()
 
-st.title("⚙️ Gerenciador de OS Malato's Tech")
-st.markdown("---")
-
-aba_os, aba_clientes, aba_cadastro_os, aba_usuarios, aba_dash = st.tabs([
-    "📋 Listar Ordens de Serviço", 
-    "👤 Cadastrar Cliente", 
-    "➕ Abrir Nova OS",
-    "🧑‍💻 Cadastrar Usuário/Técnico",
-    "📊 Dashboard"
-])
-
+# -----------------------------------------
+# FUNÇÕES
+# -----------------------------------------
 def formatar_data(data_str):
     if not data_str:
         return "-"
@@ -97,58 +126,103 @@ def formatar_data(data_str):
     except:
         return data_str
 
+
 def gerar_pdf_os(os_info):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
-    p.rect(30, 80, 550, 700)
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(40, 750, "Malato's Tech")
-    p.line(40, 690, 560, 690)
-    p.setFont("Helvetica-Bold", 18)
-    p.drawCentredString(300, 660, f"ORDEM DE SERVIÇO Nº {os_info['id']}")
+
+    p.drawString(50, 750, "Malato's Tech")
+    p.drawString(50, 720, f"OS Nº {os_info['id']}")
+
     p.save()
     buffer.seek(0)
     return buffer
 
-# --- ABA 1: LISTAR ORDENS DE SERVIÇO ---
-with aba_os:
-    st.subheader("Ordens de Serviço Cadastradas")
-    col_busca1, col_busca2 = st.columns(2)
-    with col_busca1:
-        termo_busca = st.text_input("🔍 Buscar por nome do cliente ou descrição:")
-    with col_busca2:
-        filtro_status = st.selectbox("🗂️ Filtrar por Status:", ["Todos", "Aberta", "Em Andamento", "Concluída"])
-    
+
+# -----------------------------------------
+# MAIN
+# -----------------------------------------
+st.title("⚙️ Sistema de Ordem de Serviço")
+st.markdown("---")
+
+aba1, aba2, aba3, aba4, aba5 = st.tabs([
+    "📋 Ordens",
+    "👤 Clientes",
+    "➕ Nova OS",
+    "🧑‍💻 Usuários",
+    "📊 Dashboard"
+])
+
+# -----------------------------------------
+# LISTAR OS
+# -----------------------------------------
+with aba1:
+
+    st.subheader("Ordens de Serviço")
+
+    busca = st.text_input("Buscar")
+    status = st.selectbox("Status", ["Todos", "Aberta", "Em Andamento", "Concluída"])
+
     try:
-        response = requests.get(f"{API_URL}/os/", timeout=30)
+        response = requests.get(
+            f"{API_URL}/os/",
+            timeout=30,
+            verify=False  # 🔥 CORREÇÃO SSL
+        )
+
         if response.status_code == 200:
-            os_data = response.json()
-            if len(os_data) == 0:
-                st.info("Nenhuma Ordem de Serviço encontrada.")
+
+            dados = response.json()
+            lista = []
+
+            for item in dados:
+
+                cliente = item["cliente"]["nome"] if item.get("cliente") else "Não identificado"
+
+                if status != "Todos" and item["status"] != status:
+                    continue
+
+                if busca:
+                    b = busca.lower()
+                    if b not in cliente.lower() and b not in item["descricao"].lower():
+                        continue
+
+                lista.append({
+                    "ID": item["id"],
+                    "Cliente": cliente,
+                    "Descrição": item["descricao"],
+                    "Valor": f"R$ {item['valor']:.2f}",
+                    "Status": item["status"],
+                    "Data": formatar_data(item.get("data_abertura"))
+                })
+
+            if lista:
+                df = pd.DataFrame(lista)
+                st.dataframe(df, use_container_width=True)
             else:
-                lista_formatada = []
-                for os_item in os_data:
-                    cliente_nome = os_item["cliente"]["nome"] if os_item["cliente"] else "Não identificado"
-                    if filtro_status != "Todos" and os_item["status"] != filtro_status:
-                        continue
-                    if termo_busca and (termo_busca.lower() not in cliente_nome.lower() and termo_busca.lower() not in os_item["descricao"].lower()):
-                        continue
-                        
-                    lista_formatada.append({
-                        "ID da OS": os_item["id"],
-                        "Cliente": cliente_nome,
-                        "Descrição do Problema": os_item["descricao"],
-                        "Valor (R$)": f"R$ {os_item['valor']:.2f}",
-                        "Status": os_item["status"],
-                        "Data Abertura": formatar_data(os_item.get("data_abertura")),
-                    })
-                
-                if lista_formatada:
-                    df = pd.DataFrame(lista_formatada)
-                    st.dataframe(df, use_container_width=True)
-                else:
-                    st.info("Nenhuma OS corresponde aos filtros aplicados.")
+                st.info("Sem resultados")
+
         else:
-            st.error(f"Erro ao buscar OS: {response.status_code}")
-    except requests.exceptions.RequestException:
-        st.error("Erro na comunicação com o backend para listar as ordens.")
+            st.error(f"Erro API: {response.status_code}")
+
+    except Exception as e:
+        st.error(f"Erro conexão: {e}")
+
+# -----------------------------------------
+# OUTRAS ABAS
+# -----------------------------------------
+with aba2:
+    st.subheader("Clientes")
+    st.info("Em construção")
+
+with aba3:
+    st.subheader("Nova OS")
+    st.info("Em construção")
+
+with aba4:
+    st.subheader("Usuários")
+    st.info("Em construção")
+
+with aba5:
+    st.subheader("Dashboard")
+    st.info("Em construção")
