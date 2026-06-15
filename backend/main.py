@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware  # 👈 ADICIONADO
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 import datetime
@@ -14,6 +15,17 @@ load_dotenv()
 from backend import models, schemas, database
 
 app = FastAPI(title="API Sistema de OS PRO")
+
+# ==========================================
+# CONFIGURAÇÃO DE CORS (LIBERA CONEXÃO EXTERNA)
+# ==========================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite que qualquer frontend (Streamlit local ou nuvem) acesse a API
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite GET, POST, PUT, DELETE
+    allow_headers=["*"],
+)
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -33,7 +45,6 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 # NOTIFICAÇÃO
 # ==========================================
 def disparar_notificacao_cliente(cliente_nome, cliente_email, cliente_telefone, os_id, novo_status):
-
     mensagem_texto = f"Olá {cliente_nome}! Sua OS #{os_id} agora está como: {novo_status}"
 
     # EMAIL
@@ -56,13 +67,11 @@ def disparar_notificacao_cliente(cliente_nome, cliente_email, cliente_telefone, 
     if TWILIO_SID and TWILIO_AUTH and TWILIO_NUMBER:
         try:
             url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
-
             payload = {
                 "From": f"whatsapp:{TWILIO_NUMBER}",
                 "To": f"whatsapp:{cliente_telefone}",
                 "Body": mensagem_texto
             }
-
             requests.post(url, data=payload, auth=(TWILIO_SID, TWILIO_AUTH))
         except Exception as e:
             print(f"Erro WhatsApp: {e}")
@@ -108,14 +117,13 @@ def cadastrar_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(data
         username=usuario.username,
         senha_hash=gerar_senha_hash(usuario.password)
     )
-
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
-@app.post("/login/")
+@app.post("/login/")  # 👈 Mantida a rota com barra padrão do seu código
 def login(dados: schemas.LoginRequest, db: Session = Depends(database.get_db)):
     user = db.query(models.Usuario).filter_by(username=dados.username).first()
 
@@ -147,9 +155,7 @@ def listar_clientes(db: Session = Depends(database.get_db)):
 # ==========================================
 @app.post("/os/", response_model=schemas.OSResponse, status_code=201)
 def criar_os(os: schemas.OSCreate, db: Session = Depends(database.get_db)):
-
     cliente = db.query(models.Cliente).filter_by(id=os.cliente_id).first()
-
     if not cliente:
         raise HTTPException(404, "Cliente não encontrado")
 
@@ -158,18 +164,15 @@ def criar_os(os: schemas.OSCreate, db: Session = Depends(database.get_db)):
     db.commit()
     db.refresh(nova_os)
 
-    # 🔥 importante: carregar cliente
     nova_os = db.query(models.OrdemServico)\
         .options(joinedload(models.OrdemServico.cliente))\
         .filter_by(id=nova_os.id)\
         .first()
-
     return nova_os
 
 
 @app.get("/os/", response_model=List[schemas.OSResponse])
 def listar_os(db: Session = Depends(database.get_db)):
-
     return db.query(models.OrdemServico)\
         .options(joinedload(models.OrdemServico.cliente))\
         .all()
@@ -177,7 +180,6 @@ def listar_os(db: Session = Depends(database.get_db)):
 
 @app.put("/os/{os_id}/status", response_model=schemas.OSResponse)
 def atualizar_status_os(os_id: int, status: str, db: Session = Depends(database.get_db)):
-
     os_db = db.query(models.OrdemServico)\
         .options(joinedload(models.OrdemServico.cliente))\
         .filter_by(id=os_id)\
@@ -191,18 +193,14 @@ def atualizar_status_os(os_id: int, status: str, db: Session = Depends(database.
 
     db.commit()
     db.refresh(os_db)
-
     return os_db
 
 
 @app.delete("/os/{os_id}", status_code=204)
 def deletar_os(os_id: int, db: Session = Depends(database.get_db)):
-
     os_db = db.query(models.OrdemServico).filter_by(id=os_id).first()
-
     if not os_db:
         raise HTTPException(404, "OS não encontrada")
-
     db.delete(os_db)
     db.commit()
 
@@ -212,11 +210,8 @@ def deletar_os(os_id: int, db: Session = Depends(database.get_db)):
 # ==========================================
 @app.get("/dashboard/estatisticas")
 def dashboard(db: Session = Depends(database.get_db)):
-
     os_list = db.query(models.OrdemServico).all()
-
     total_os = len(os_list)
-
     concluidas = [o for o in os_list if o.status == "Concluída"]
     total_faturamento = sum(o.valor for o in concluidas)
 
